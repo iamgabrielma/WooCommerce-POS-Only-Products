@@ -54,6 +54,16 @@ class WC_POS_Only_Products {
     const VERSION = '0.1.0';
 
     /**
+     * Meta key for product POS availability
+     */
+    const META_KEY_POS_ALLOWED = '_wc_pos_allowed';
+
+    /**
+     * Option key for global POS setting
+     */
+    const OPTION_KEY_SELL_ALL = 'wc_pos_sell_all_products';
+
+    /**
      * Constructor
      */
     public function __construct() {
@@ -64,8 +74,69 @@ class WC_POS_Only_Products {
      * Initialize hooks
      */
     private function init_hooks() {
-        // Hook into Point of Sale settings
+        // Hook into exiting Point of Sale settings screen
         add_filter( 'woocommerce_get_settings_point-of-sale', array( $this, 'add_pos_settings' ), 10, 2 );
+
+        // Product meta hooks
+        // (Triggers set_default_product_meta when a new product is created, or existing product is updated)
+        add_action( 'woocommerce_new_product', array( $this, 'set_default_product_meta' ), 10, 1 );
+        add_action( 'woocommerce_update_product', array( $this, 'set_default_product_meta' ), 10, 1 );
+    }
+
+    /**
+     * Get the default value for POS allowed based on global setting
+     *
+     * @return string 'yes' or 'no'
+     */
+    public function get_pos_allowed_default() {
+        return get_option( self::OPTION_KEY_SELL_ALL, 'yes' );
+    }
+
+    /**
+     * Check if a product is allowed in POS
+     * TODO: Investigate how this intersects with handling non-simple products that are already not supported
+     *
+     * @param int|WC_Product $product Product ID or product object
+     * @return bool True if product is allowed in POS
+     */
+    public function is_product_pos_allowed( $product ) {
+        if ( is_numeric( $product ) ) {
+            $product = wc_get_product( $product );
+        }
+
+        if ( ! $product ) {
+            return false;
+        }
+
+        $pos_allowed = $product->get_meta( self::META_KEY_POS_ALLOWED, true );
+
+        // If meta doesn't exist, use global default
+        if ( '' === $pos_allowed ) {
+            $pos_allowed = $this->get_pos_allowed_default();
+        }
+
+        return 'yes' === $pos_allowed;
+    }
+
+    /**
+     * Set default POS meta for products
+     *
+     * @param int $product_id Product ID
+     */
+    public function set_default_product_meta( $product_id ) {
+        $product = wc_get_product( $product_id );
+
+        if ( ! $product ) {
+            return;
+        }
+
+        // Only set if meta doesn't exist
+        $existing_meta = $product->get_meta( self::META_KEY_POS_ALLOWED, true );
+
+        if ( '' === $existing_meta ) {
+            $product->update_meta_data( self::META_KEY_POS_ALLOWED, $this->get_pos_allowed_default() );
+            $product->save_meta_data();
+        }
     }
 
     /**
@@ -86,11 +157,19 @@ class WC_POS_Only_Products {
                     WooCommerce POS Only Products plugin is active and running.<br>
                     <em>This is a development plugin for exploring POS product filtering functionality.</em>
                 </div>',
-                'id'    => 'wc_pos_products_status',
+                'id'    => 'wc_pos_products_section',
+            ),
+            array(
+                'title'    => __( 'Sell all products in POS', 'wc-pos-only-products' ),
+                'desc'     => __( 'Enable this option to make all products available for Point of Sale by default', 'wc-pos-only-products' ),
+                'id'       => self::OPTION_KEY_SELL_ALL,
+                'default'  => 'yes',
+                'type'     => 'checkbox',
+                'desc_tip' => __( 'When enabled, all products are marked as available for POS.', 'wc-pos-only-products' ),
             ),
             array(
                 'type' => 'sectionend',
-                'id'   => 'wc_pos_products_status',
+                'id'   => 'wc_pos_products_section',
             ),
         );
 
