@@ -81,6 +81,9 @@ class WC_POS_Only_Products {
         // (Triggers set_default_product_meta when a new product is created, or existing product is updated)
         add_action( 'woocommerce_new_product', array( $this, 'set_default_product_meta' ), 10, 1 );
         add_action( 'woocommerce_update_product', array( $this, 'set_default_product_meta' ), 10, 1 );
+
+        // Add read-only field to product edit screen (WooCommerce > Product > Edit > Advanced tab)
+        add_action( 'woocommerce_product_options_advanced', array( $this, 'add_product_pos_field' ) );
     }
 
     /**
@@ -137,6 +140,46 @@ class WC_POS_Only_Products {
             $product->update_meta_data( self::META_KEY_POS_ALLOWED, $this->get_pos_allowed_default() );
             $product->save_meta_data();
         }
+    }
+
+    /**
+     * Add read-only POS availability field to product Advanced tab
+     */
+    public function add_product_pos_field() {
+        global $post;
+
+        $product = wc_get_product( $post->ID );
+
+        if ( ! $product ) {
+            return;
+        }
+
+        $pos_allowed = $product->get_meta( self::META_KEY_POS_ALLOWED, true );
+
+        // If meta doesn't exist, use global default
+        if ( '' === $pos_allowed ) {
+            $pos_allowed = $this->get_pos_allowed_default();
+        }
+
+        ?>
+        <div class="options_group">
+            <?php
+            woocommerce_wp_checkbox(
+                array(
+                    'id'            => self::META_KEY_POS_ALLOWED,
+                    'value'         => $pos_allowed,
+                    'label'         => __( 'Available for POS', 'wc-pos-only-products' ),
+                    'cbvalue'       => 'yes',
+                    'description'   => __( 'This product is available for Point of Sale', 'wc-pos-only-products' ),
+                    'wrapper_class' => 'show_if_simple show_if_variable',
+                    'custom_attributes' => array(
+                        'disabled' => 'disabled',
+                    ),
+                )
+            );
+            ?>
+        </div>
+        <?php
     }
 
     /**
